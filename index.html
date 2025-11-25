@@ -1,0 +1,1365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MindKeeper - AI Notetaking</title>
+    <script src="https://cdn.jsdelivr.net/npm/@tailwindcss/browser@4"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Firebase SDK -->
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+    <style>
+        * { font-family: 'Inter', sans-serif; }
+        .gradient-bg { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); }
+        .glass { background: rgba(255,255,255,0.1); backdrop-filter: blur(10px); }
+        .category-pill { transition: all 0.3s ease; }
+        .category-pill:hover { transform: translateY(-2px); }
+        .note-card { transition: all 0.3s ease; }
+        .note-card:hover { transform: translateY(-4px); box-shadow: 0 20px 40px rgba(0,0,0,0.1); }
+        .pulse-ring { animation: pulse-ring 1.5s cubic-bezier(0.215, 0.61, 0.355, 1) infinite; }
+        @keyframes pulse-ring {
+            0% { transform: scale(0.8); opacity: 1; }
+            80%, 100% { transform: scale(1.4); opacity: 0; }
+        }
+        .recording { animation: recording-pulse 1s ease-in-out infinite; }
+        @keyframes recording-pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .importance-high { border-left: 4px solid #ef4444; }
+        .importance-medium { border-left: 4px solid #f59e0b; }
+        .importance-low { border-left: 4px solid #10b981; }
+        .fade-in { animation: fadeIn 0.5s ease-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .reminder-badge { animation: gentle-bounce 2s ease-in-out infinite; }
+        @keyframes gentle-bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-3px); }
+        }
+        .clarification-preview { background: linear-gradient(135deg, #f0f9ff 0%, #fdf4ff 100%); }
+    </style>
+</head>
+<body class="bg-gray-50 min-h-screen">
+    <!-- Header -->
+    <header class="gradient-bg text-white py-6 px-4 shadow-lg">
+        <div class="max-w-6xl mx-auto flex items-center justify-between">
+            <div class="flex items-center gap-3">
+                <div class="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <svg class="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-bold">MindKeeper</h1>
+                    <p class="text-white/70 text-sm">Your AI-powered second brain</p>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <button id="settingsBtn" class="p-2 hover:bg-white/10 rounded-lg transition" title="Settings">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
+                    </svg>
+                </button>
+                <button id="reminderBtn" class="relative p-2 hover:bg-white/10 rounded-lg transition">
+                    <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+                    </svg>
+                    <span id="reminderCount" class="hidden absolute -top-1 -right-1 bg-red-500 text-xs w-5 h-5 rounded-full flex items-center justify-center reminder-badge">0</span>
+                </button>
+                <button id="summaryBtn" class="flex items-center gap-2 bg-white/20 hover:bg-white/30 px-4 py-2 rounded-lg transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/>
+                    </svg>
+                    <span class="hidden sm:inline">Insights</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-6xl mx-auto p-4 sm:p-6">
+        <!-- Input Section -->
+        <div class="bg-white rounded-2xl shadow-lg p-6 mb-8 fade-in">
+            <div class="flex items-start gap-4">
+                <div class="flex-1">
+                    <textarea id="noteInput" 
+                        class="w-full p-4 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-purple-500 focus:border-transparent text-gray-700"
+                        rows="3"
+                        placeholder="What's on your mind? Type or use voice..."></textarea>
+                    <div class="flex items-center justify-between mt-4">
+                        <div class="flex items-center gap-2">
+                            <button id="voiceBtn" class="flex items-center gap-2 px-4 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition text-gray-700">
+                                <svg id="micIcon" class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11a7 7 0 01-7 7m0 0a7 7 0 01-7-7m7 7v4m0 0H8m4 0h4m-4-8a3 3 0 01-3-3V5a3 3 0 116 0v6a3 3 0 01-3 3z"/>
+                                </svg>
+                                <span id="voiceText">Voice Note</span>
+                            </button>
+                            <span id="voiceStatus" class="text-sm text-gray-500 hidden"></span>
+                        </div>
+                        <button id="addNoteBtn" class="px-6 py-2 gradient-bg text-white rounded-lg hover:opacity-90 transition font-medium">
+                            Save Thought
+                        </button>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- AI Processing Indicator -->
+            <div id="aiProcessing" class="hidden mt-4 flex items-center gap-3 text-purple-600">
+                <div class="flex gap-1">
+                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style="animation-delay: 0ms"></div>
+                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style="animation-delay: 150ms"></div>
+                    <div class="w-2 h-2 bg-purple-500 rounded-full animate-bounce" style="animation-delay: 300ms"></div>
+                </div>
+                <span class="text-sm">AI is analyzing your thought...</span>
+            </div>
+        </div>
+
+        <!-- Categories Filter -->
+        <div class="mb-6">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-lg font-semibold text-gray-800">Categories</h2>
+                <button id="addCategoryBtn" class="text-sm text-purple-600 hover:text-purple-700 flex items-center gap-1">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/>
+                    </svg>
+                    Add Category
+                </button>
+            </div>
+            <div id="categoriesContainer" class="flex flex-wrap gap-2">
+                <!-- Categories will be rendered here -->
+            </div>
+        </div>
+
+        <!-- Notes Grid -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4" id="notesGrid">
+            <!-- Notes will be rendered here -->
+        </div>
+
+        <!-- Empty State -->
+        <div id="emptyState" class="text-center py-16">
+            <div class="w-24 h-24 mx-auto mb-6 bg-purple-100 rounded-full flex items-center justify-center">
+                <svg class="w-12 h-12 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"/>
+                </svg>
+            </div>
+            <h3 class="text-xl font-semibold text-gray-700 mb-2">Your mind is clear</h3>
+            <p class="text-gray-500">Start capturing your thoughts, and I'll help you organize them.</p>
+        </div>
+    </main>
+
+    <!-- Reminder Modal -->
+    <div id="reminderModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full max-h-[80vh] overflow-hidden fade-in">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-semibold text-gray-800">Things to Remember</h3>
+                    <button id="closeReminderModal" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+                <p class="text-gray-500 text-sm mt-1">Important thoughts that shouldn't slip away</p>
+            </div>
+            <div id="remindersList" class="p-6 overflow-y-auto max-h-96">
+                <!-- Reminders will be listed here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Summary/Insights Modal -->
+    <div id="summaryModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-2xl w-full max-h-[80vh] overflow-hidden fade-in">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-semibold text-gray-800">Your Mind Summary</h3>
+                    <button id="closeSummaryModal" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div id="summaryContent" class="p-6 overflow-y-auto max-h-[60vh]">
+                <!-- Summary will be rendered here -->
+            </div>
+        </div>
+    </div>
+
+    <!-- Add Category Modal -->
+    <div id="categoryModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full fade-in">
+            <div class="p-6">
+                <h3 class="text-xl font-semibold text-gray-800 mb-4">Add New Category</h3>
+                <input type="text" id="newCategoryInput" 
+                    class="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                    placeholder="Category name...">
+                <div class="flex gap-3 mt-4">
+                    <button id="cancelCategory" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+                    <button id="saveCategory" class="flex-1 px-4 py-2 gradient-bg text-white rounded-lg hover:opacity-90 transition">Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AI Clarification Preview Modal -->
+    <div id="clarifyModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-lg w-full fade-in">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center gap-2">
+                    <div class="w-8 h-8 gradient-bg rounded-lg flex items-center justify-center">
+                        <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+                        </svg>
+                    </div>
+                    <h3 class="text-xl font-semibold text-gray-800">AI Clarification</h3>
+                </div>
+                <p class="text-gray-500 text-sm mt-1">I've cleaned up your thought. Review and save.</p>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Original</label>
+                    <p id="originalText" class="mt-1 text-gray-400 text-sm italic p-3 bg-gray-50 rounded-lg"></p>
+                </div>
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">Clarified</label>
+                    <textarea id="clarifiedText" 
+                        class="mt-1 w-full p-3 border border-purple-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-purple-500 clarification-preview text-gray-700"
+                        rows="3"></textarea>
+                </div>
+                <div class="mb-4">
+                    <label class="text-xs font-medium text-gray-500 uppercase tracking-wide">AI Detected</label>
+                    <div id="aiDetectedInfo" class="mt-2 flex flex-wrap gap-2">
+                        <!-- Categories and importance will be shown here -->
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button id="cancelClarify" class="flex-1 px-4 py-2 border border-gray-200 rounded-lg hover:bg-gray-50 transition">Cancel</button>
+                    <button id="useOriginal" class="flex-1 px-4 py-2 border border-purple-200 text-purple-600 rounded-lg hover:bg-purple-50 transition">Use Original</button>
+                    <button id="saveClarified" class="flex-1 px-4 py-2 gradient-bg text-white rounded-lg hover:opacity-90 transition">Save Clarified</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal (for API key) -->
+    <div id="settingsModal" class="hidden fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+        <div class="bg-white rounded-2xl max-w-md w-full fade-in">
+            <div class="p-6 border-b border-gray-100">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-xl font-semibold text-gray-800">Settings</h3>
+                    <button id="closeSettingsModal" class="p-2 hover:bg-gray-100 rounded-lg">
+                        <svg class="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="p-6">
+                <div class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">AI Provider</label>
+                    <select id="aiProvider" class="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500">
+                        <option value="groq">Groq (Free & Fast)</option>
+                        <option value="openai">OpenAI</option>
+                        <option value="none">No AI (Use Pattern Matching)</option>
+                    </select>
+                </div>
+                <div id="apiKeySection" class="mb-4">
+                    <label class="block text-sm font-medium text-gray-700 mb-2">API Key</label>
+                    <input type="password" id="aiApiKey" 
+                        class="w-full p-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-purple-500"
+                        placeholder="Enter your API key...">
+                    <p class="text-xs text-gray-500 mt-2" id="apiKeyHelp">
+                        Get a free Groq API key at <a href="https://console.groq.com" target="_blank" class="text-purple-600 hover:underline">console.groq.com</a>
+                    </p>
+                </div>
+                <div class="flex items-center gap-3 mb-4">
+                    <input type="checkbox" id="enableClarification" class="w-4 h-4 text-purple-600 rounded focus:ring-purple-500">
+                    <label for="enableClarification" class="text-sm text-gray-700">Enable AI clarification before saving</label>
+                </div>
+                <button id="saveSettings" class="w-full px-4 py-2 gradient-bg text-white rounded-lg hover:opacity-90 transition">Save Settings</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Firebase Configuration
+        // TODO: Replace with your own Firebase config from console.firebase.google.com
+        const firebaseConfig = {
+            apiKey: "YOUR_API_KEY",
+            authDomain: "YOUR_PROJECT.firebaseapp.com",
+            projectId: "YOUR_PROJECT_ID",
+            storageBucket: "YOUR_PROJECT.appspot.com",
+            messagingSenderId: "YOUR_SENDER_ID",
+            appId: "YOUR_APP_ID"
+        };
+
+        // Initialize Firebase
+        let db = null;
+        let auth = null;
+        let userId = null;
+        let unsubscribeNotes = null;
+        let unsubscribeCategories = null;
+
+        // App State
+        const state = {
+            notes: [],
+            categories: ["To Do", "Learning", "Date Ideas", "Gift Ideas", "Reminders", "Random Thoughts"],
+            activeCategory: 'all',
+            isRecording: false,
+            recognition: null,
+            isOnline: false,
+            isSyncing: false,
+            pendingNote: null // For clarification flow
+        };
+
+        // AI Settings
+        const aiSettings = {
+            provider: localStorage.getItem('mindkeeper_ai_provider') || 'groq',
+            apiKey: localStorage.getItem('mindkeeper_ai_key') || '',
+            enableClarification: localStorage.getItem('mindkeeper_clarification') === 'true'
+        };
+
+        // AI API endpoints
+        const AI_ENDPOINTS = {
+            groq: 'https://api.groq.com/openai/v1/chat/completions',
+            openai: 'https://api.openai.com/v1/chat/completions'
+        };
+
+        const AI_MODELS = {
+            groq: 'llama-3.1-8b-instant',
+            openai: 'gpt-3.5-turbo'
+        };
+
+        // AI Clarification Function
+        async function clarifyWithAI(rawText) {
+            if (aiSettings.provider === 'none' || !aiSettings.apiKey) {
+                return null;
+            }
+
+            const systemPrompt = `You are a helpful assistant that clarifies and cleans up informal notes and thoughts. Your job is to:
+1. Fix grammar and spelling
+2. Make the thought clearer and more actionable
+3. Keep the original meaning and intent
+4. Keep it concise - don't add unnecessary words
+5. Preserve any names, dates, or specific details
+
+Also analyze the note and return:
+- categories: array of relevant categories from this list: ${state.categories.join(', ')}
+- importance: "high", "medium", or "low"
+- shouldRemind: true if this is something the user should be reminded about
+- reminderReason: brief reason if shouldRemind is true
+
+Respond in JSON format:
+{
+  "clarified": "the cleaned up text",
+  "categories": ["Category1"],
+  "importance": "medium",
+  "shouldRemind": false,
+  "reminderReason": ""
+}`;
+
+            try {
+                const response = await fetch(AI_ENDPOINTS[aiSettings.provider], {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': `Bearer ${aiSettings.apiKey}`
+                    },
+                    body: JSON.stringify({
+                        model: AI_MODELS[aiSettings.provider],
+                        messages: [
+                            { role: 'system', content: systemPrompt },
+                            { role: 'user', content: rawText }
+                        ],
+                        temperature: 0.3,
+                        max_tokens: 500
+                    })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`API error: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const content = data.choices[0].message.content;
+                
+                // Parse JSON from response
+                const jsonMatch = content.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    return JSON.parse(jsonMatch[0]);
+                }
+                return null;
+            } catch (error) {
+                console.error('AI clarification error:', error);
+                return null;
+            }
+        }
+
+        // Show clarification modal
+        function showClarificationModal(original, aiResult, analysis) {
+            const modal = document.getElementById('clarifyModal');
+            document.getElementById('originalText').textContent = original;
+            document.getElementById('clarifiedText').value = aiResult?.clarified || original;
+            
+            const detectedInfo = document.getElementById('aiDetectedInfo');
+            const categories = aiResult?.categories || analysis.categories;
+            const importance = aiResult?.importance || analysis.importance;
+            
+            detectedInfo.innerHTML = `
+                ${categories.map(cat => {
+                    const colors = categoryColors[cat] || defaultColor;
+                    return `<span class="text-xs px-2 py-1 rounded-full ${colors.bg} ${colors.text}">${cat}</span>`;
+                }).join('')}
+                <span class="text-xs px-2 py-1 rounded-full ${
+                    importance === 'high' ? 'bg-red-100 text-red-700' :
+                    importance === 'medium' ? 'bg-yellow-100 text-yellow-700' :
+                    'bg-green-100 text-green-700'
+                }">
+                    ${importance.charAt(0).toUpperCase() + importance.slice(1)} Priority
+                </span>
+                ${(aiResult?.shouldRemind || analysis.shouldRemind) ? 
+                    '<span class="text-xs px-2 py-1 rounded-full bg-orange-100 text-orange-700">🔔 Will Remind</span>' : ''}
+            `;
+
+            // Store pending note data
+            state.pendingNote = {
+                original,
+                aiResult,
+                analysis
+            };
+
+            modal.classList.remove('hidden');
+        }
+
+        // Initialize Firebase and Auth
+        async function initFirebase() {
+            try {
+                // Check if Firebase config is set
+                if (firebaseConfig.apiKey === "YOUR_API_KEY") {
+                    console.log("Firebase not configured - using localStorage only");
+                    showSyncStatus('offline', 'Local mode - Configure Firebase for cloud sync');
+                    loadFromLocalStorage();
+                    return;
+                }
+
+                firebase.initializeApp(firebaseConfig);
+                db = firebase.firestore();
+                auth = firebase.auth();
+
+                // Enable offline persistence
+                await db.enablePersistence({ synchronizeTabs: true }).catch(err => {
+                    if (err.code === 'failed-precondition') {
+                        console.log('Multiple tabs open, persistence enabled in first tab only');
+                    } else if (err.code === 'unimplemented') {
+                        console.log('Browser doesn\'t support persistence');
+                    }
+                });
+
+                // Listen for auth state changes
+                auth.onAuthStateChanged(async (user) => {
+                    if (user) {
+                        userId = user.uid;
+                        state.isOnline = true;
+                        showSyncStatus('syncing', 'Syncing...');
+                        await setupRealtimeListeners();
+                        showSyncStatus('online', 'Synced to cloud');
+                    } else {
+                        // Sign in anonymously
+                        await auth.signInAnonymously();
+                    }
+                });
+
+            } catch (error) {
+                console.error("Firebase initialization error:", error);
+                showSyncStatus('offline', 'Offline mode');
+                loadFromLocalStorage();
+            }
+        }
+
+        // Setup realtime listeners for Firestore
+        function setupRealtimeListeners() {
+            if (!db || !userId) return;
+
+            // Listen to notes collection
+            unsubscribeNotes = db.collection('users').doc(userId).collection('notes')
+                .orderBy('createdAt', 'desc')
+                .onSnapshot((snapshot) => {
+                    state.notes = snapshot.docs.map(doc => ({
+                        id: doc.id,
+                        ...doc.data()
+                    }));
+                    // Also save to localStorage as backup
+                    localStorage.setItem('mindkeeper_notes', JSON.stringify(state.notes));
+                    renderNotes();
+                    renderCategories();
+                    updateReminderCount();
+                }, (error) => {
+                    console.error("Notes listener error:", error);
+                    showSyncStatus('offline', 'Connection lost');
+                });
+
+            // Listen to categories
+            unsubscribeCategories = db.collection('users').doc(userId).collection('settings').doc('categories')
+                .onSnapshot((doc) => {
+                    if (doc.exists) {
+                        state.categories = doc.data().list || state.categories;
+                        localStorage.setItem('mindkeeper_categories', JSON.stringify(state.categories));
+                        renderCategories();
+                    }
+                }, (error) => {
+                    console.error("Categories listener error:", error);
+                });
+        }
+
+        // Load from localStorage (fallback)
+        function loadFromLocalStorage() {
+            state.notes = JSON.parse(localStorage.getItem('mindkeeper_notes') || '[]');
+            state.categories = JSON.parse(localStorage.getItem('mindkeeper_categories') || '["To Do", "Learning", "Date Ideas", "Gift Ideas", "Reminders", "Random Thoughts"]');
+            renderCategories();
+            renderNotes();
+            updateReminderCount();
+        }
+
+        // Show sync status
+        function showSyncStatus(status, message) {
+            let statusEl = document.getElementById('syncStatus');
+            if (!statusEl) {
+                statusEl = document.createElement('div');
+                statusEl.id = 'syncStatus';
+                statusEl.className = 'fixed bottom-4 right-4 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all duration-300 z-50';
+                document.body.appendChild(statusEl);
+            }
+
+            const statusConfig = {
+                online: { bg: 'bg-green-100 text-green-700', icon: '☁️' },
+                offline: { bg: 'bg-gray-100 text-gray-600', icon: '💾' },
+                syncing: { bg: 'bg-blue-100 text-blue-700', icon: '🔄' },
+                error: { bg: 'bg-red-100 text-red-700', icon: '⚠️' }
+            };
+
+            const config = statusConfig[status] || statusConfig.offline;
+            statusEl.className = `fixed bottom-4 right-4 px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-all duration-300 z-50 ${config.bg}`;
+            statusEl.innerHTML = `<span>${config.icon}</span><span>${message}</span>`;
+
+            // Auto-hide after 3 seconds for success states
+            if (status === 'online') {
+                setTimeout(() => {
+                    statusEl.style.opacity = '0';
+                    setTimeout(() => statusEl.style.opacity = '1', 5000);
+                }, 3000);
+            }
+        }
+
+        // Save to cloud (or localStorage if offline)
+        async function saveNote(note) {
+            if (db && userId) {
+                try {
+                    await db.collection('users').doc(userId).collection('notes').doc(note.id).set(note);
+                } catch (error) {
+                    console.error("Error saving note:", error);
+                    // Fallback to localStorage
+                    saveToLocalStorage();
+                }
+            } else {
+                saveToLocalStorage();
+            }
+        }
+
+        // Delete from cloud
+        async function deleteNoteFromCloud(noteId) {
+            if (db && userId) {
+                try {
+                    await db.collection('users').doc(userId).collection('notes').doc(noteId).delete();
+                } catch (error) {
+                    console.error("Error deleting note:", error);
+                }
+            }
+            saveToLocalStorage();
+        }
+
+        // Update note in cloud
+        async function updateNoteInCloud(noteId, updates) {
+            if (db && userId) {
+                try {
+                    await db.collection('users').doc(userId).collection('notes').doc(noteId).update(updates);
+                } catch (error) {
+                    console.error("Error updating note:", error);
+                }
+            }
+            saveToLocalStorage();
+        }
+
+        // Save categories to cloud
+        async function saveCategoriestoCloud() {
+            if (db && userId) {
+                try {
+                    await db.collection('users').doc(userId).collection('settings').doc('categories').set({
+                        list: state.categories,
+                        updatedAt: Date.now()
+                    });
+                } catch (error) {
+                    console.error("Error saving categories:", error);
+                }
+            }
+            localStorage.setItem('mindkeeper_categories', JSON.stringify(state.categories));
+        }
+
+        // Save to localStorage (backup)
+        function saveToLocalStorage() {
+            localStorage.setItem('mindkeeper_notes', JSON.stringify(state.notes));
+            localStorage.setItem('mindkeeper_categories', JSON.stringify(state.categories));
+        }
+
+        // Legacy saveState function (now uses cloud)
+        function saveState() {
+            saveToLocalStorage();
+        }
+
+        // Category colors
+        const categoryColors = {
+            'To Do': { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-200' },
+            'Learning': { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-200' },
+            'Date Ideas': { bg: 'bg-pink-100', text: 'text-pink-700', border: 'border-pink-200' },
+            'Gift Ideas': { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-200' },
+            'Reminders': { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-200' },
+            'Random Thoughts': { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-200' },
+            'Projects': { bg: 'bg-indigo-100', text: 'text-indigo-700', border: 'border-indigo-200' },
+            'Health': { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-200' },
+            'Finance': { bg: 'bg-emerald-100', text: 'text-emerald-700', border: 'border-emerald-200' },
+            'Travel': { bg: 'bg-cyan-100', text: 'text-cyan-700', border: 'border-cyan-200' },
+            'Books': { bg: 'bg-amber-100', text: 'text-amber-700', border: 'border-amber-200' },
+            'Movies': { bg: 'bg-violet-100', text: 'text-violet-700', border: 'border-violet-200' },
+            'Recipes': { bg: 'bg-lime-100', text: 'text-lime-700', border: 'border-lime-200' },
+            'Work': { bg: 'bg-slate-100', text: 'text-slate-700', border: 'border-slate-200' },
+            'Personal': { bg: 'bg-rose-100', text: 'text-rose-700', border: 'border-rose-200' }
+        };
+
+        const defaultColor = { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-200' };
+
+        // AI Categorization Engine
+        function analyzeNote(text) {
+            const lowerText = text.toLowerCase();
+            let categories = [];
+            let importance = 'low';
+            let shouldRemind = false;
+            let reminderReason = '';
+
+            // Category detection patterns
+            const patterns = {
+                'To Do': [/\b(todo|to-do|to do|need to|have to|must|should|gotta|reminder to|don't forget|remember to|task|deadline|finish|complete|submit|buy|get|pick up|call|email|schedule|book|arrange|fix|repair|clean|organize)\b/i],
+                'Learning': [/\b(learn|study|course|tutorial|book|read|research|understand|explore|discover|practice|skill|knowledge|how to|guide|lesson|education|class|training|workshop)\b/i],
+                'Date Ideas': [/\b(date|romantic|restaurant|movie|dinner|together|couple|anniversary|surprise|evening|night out|picnic|adventure|experience|activity with|plan with)\b/i],
+                'Gift Ideas': [/\b(gift|present|birthday|christmas|anniversary gift|buy for|get for|surprise for|wish list|want|would like|loves|enjoys)\b/i],
+                'Projects': [/\b(project|build|create|develop|design|launch|start|implement|feature|milestone|roadmap|mvp|prototype)\b/i],
+                'Health': [/\b(health|exercise|workout|gym|diet|nutrition|sleep|meditation|yoga|run|walk|fitness|doctor|appointment|medicine|symptom|feeling|mental)\b/i],
+                'Finance': [/\b(money|budget|save|invest|payment|bill|expense|cost|price|salary|income|tax|bank|credit|debt|loan|financial)\b/i],
+                'Travel': [/\b(travel|trip|vacation|flight|hotel|booking|destination|visit|explore|adventure|pack|itinerary|passport|visa)\b/i],
+                'Books': [/\b(book|reading|author|novel|chapter|library|kindle|audiobook|recommend|literature|fiction|non-fiction)\b/i],
+                'Movies': [/\b(movie|film|watch|series|show|netflix|streaming|cinema|actor|director|episode|season|documentary)\b/i],
+                'Recipes': [/\b(recipe|cook|bake|ingredient|meal|dish|food|kitchen|dinner|lunch|breakfast|snack|cuisine)\b/i],
+                'Work': [/\b(work|meeting|client|boss|colleague|office|presentation|report|deadline|project|team|company|career|job)\b/i],
+                'Personal': [/\b(feel|thinking|maybe|wonder|wish|hope|dream|goal|life|future|relationship|friend|family)\b/i]
+            };
+
+            // Check each category
+            for (const [category, regexes] of Object.entries(patterns)) {
+                if (state.categories.includes(category)) {
+                    for (const regex of regexes) {
+                        if (regex.test(lowerText)) {
+                            categories.push(category);
+                            break;
+                        }
+                    }
+                }
+            }
+
+            // Default to Random Thoughts if no category matched
+            if (categories.length === 0) {
+                categories.push('Random Thoughts');
+            }
+
+            // Importance detection
+            const highImportancePatterns = /\b(urgent|important|critical|asap|deadline|must|essential|priority|don't forget|crucial|vital|emergency|immediately)\b/i;
+            const mediumImportancePatterns = /\b(should|need to|have to|want to|plan to|remember|soon|this week|today|tomorrow)\b/i;
+
+            if (highImportancePatterns.test(lowerText)) {
+                importance = 'high';
+                shouldRemind = true;
+                reminderReason = 'Marked as important/urgent';
+            } else if (mediumImportancePatterns.test(lowerText)) {
+                importance = 'medium';
+                // Only remind for medium importance if it seems actionable
+                if (/\b(need to|have to|deadline|tomorrow|today|this week|don't forget|remember)\b/i.test(lowerText)) {
+                    shouldRemind = true;
+                    reminderReason = 'Contains action items';
+                }
+            }
+
+            // Special reminder triggers
+            if (/\b(birthday|anniversary|appointment|meeting|deadline|due|expires?)\b/i.test(lowerText)) {
+                shouldRemind = true;
+                reminderReason = 'Contains time-sensitive information';
+            }
+
+            // Gift/date ideas for others should be remembered
+            if ((categories.includes('Gift Ideas') || categories.includes('Date Ideas')) && importance !== 'low') {
+                shouldRemind = true;
+                reminderReason = 'Special occasion idea';
+            }
+
+            return {
+                categories: [...new Set(categories)],
+                importance,
+                shouldRemind,
+                reminderReason
+            };
+        }
+
+        // Generate summary insights
+        function generateSummary() {
+            const notes = state.notes;
+            if (notes.length === 0) return null;
+
+            const categoryCount = {};
+            const importantNotes = [];
+            const pendingTodos = [];
+            const themes = {};
+            
+            notes.forEach(note => {
+                // Count categories
+                note.categories.forEach(cat => {
+                    categoryCount[cat] = (categoryCount[cat] || 0) + 1;
+                });
+
+                // Collect important notes
+                if (note.importance === 'high') {
+                    importantNotes.push(note);
+                }
+
+                // Collect todos
+                if (note.categories.includes('To Do') && !note.completed) {
+                    pendingTodos.push(note);
+                }
+
+                // Extract themes (simple word frequency)
+                const words = note.content.toLowerCase().split(/\s+/);
+                words.forEach(word => {
+                    if (word.length > 4 && !/\b(that|this|with|from|have|been|were|they|their|about|would|could|should)\b/.test(word)) {
+                        themes[word] = (themes[word] || 0) + 1;
+                    }
+                });
+            });
+
+            // Get top themes
+            const topThemes = Object.entries(themes)
+                .sort((a, b) => b[1] - a[1])
+                .slice(0, 5)
+                .map(([word]) => word);
+
+            // Generate insights
+            const insights = [];
+            
+            if (pendingTodos.length > 0) {
+                insights.push(`You have ${pendingTodos.length} pending task${pendingTodos.length > 1 ? 's' : ''} to complete.`);
+            }
+            
+            if (importantNotes.length > 0) {
+                insights.push(`${importantNotes.length} high-priority thought${importantNotes.length > 1 ? 's' : ''} need${importantNotes.length === 1 ? 's' : ''} attention.`);
+            }
+
+            const topCategory = Object.entries(categoryCount).sort((a, b) => b[1] - a[1])[0];
+            if (topCategory) {
+                insights.push(`"${topCategory[0]}" is your most active category with ${topCategory[1]} notes.`);
+            }
+
+            return {
+                totalNotes: notes.length,
+                categoryCount,
+                importantNotes,
+                pendingTodos,
+                topThemes,
+                insights,
+                recentActivity: notes.slice(0, 5)
+            };
+        }
+
+        // Save to localStorage
+        function saveState() {
+            localStorage.setItem('mindkeeper_notes', JSON.stringify(state.notes));
+            localStorage.setItem('mindkeeper_categories', JSON.stringify(state.categories));
+        }
+
+        // Render categories
+        function renderCategories() {
+            const container = document.getElementById('categoriesContainer');
+            const allCount = state.notes.length;
+            
+            let html = `
+                <button class="category-pill px-4 py-2 rounded-full text-sm font-medium transition
+                    ${state.activeCategory === 'all' ? 'gradient-bg text-white' : 'bg-white border border-gray-200 text-gray-600 hover:border-purple-300'}"
+                    data-category="all">
+                    All <span class="ml-1 opacity-70">${allCount}</span>
+                </button>
+            `;
+
+            state.categories.forEach(category => {
+                const count = state.notes.filter(n => n.categories.includes(category)).length;
+                const colors = categoryColors[category] || defaultColor;
+                const isActive = state.activeCategory === category;
+                
+                html += `
+                    <button class="category-pill px-4 py-2 rounded-full text-sm font-medium transition
+                        ${isActive ? 'gradient-bg text-white' : `${colors.bg} ${colors.text} hover:opacity-80`}"
+                        data-category="${category}">
+                        ${category} <span class="ml-1 opacity-70">${count}</span>
+                    </button>
+                `;
+            });
+
+            container.innerHTML = html;
+
+            // Add click handlers
+            container.querySelectorAll('[data-category]').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    state.activeCategory = btn.dataset.category;
+                    renderCategories();
+                    renderNotes();
+                });
+            });
+        }
+
+        // Render notes
+        function renderNotes() {
+            const container = document.getElementById('notesGrid');
+            const emptyState = document.getElementById('emptyState');
+            
+            let filteredNotes = state.notes;
+            if (state.activeCategory !== 'all') {
+                filteredNotes = state.notes.filter(n => n.categories.includes(state.activeCategory));
+            }
+
+            if (filteredNotes.length === 0) {
+                container.innerHTML = '';
+                emptyState.classList.remove('hidden');
+                return;
+            }
+
+            emptyState.classList.add('hidden');
+
+            container.innerHTML = filteredNotes.map(note => {
+                const colors = categoryColors[note.categories[0]] || defaultColor;
+                const importanceClass = `importance-${note.importance}`;
+                const timeAgo = getTimeAgo(note.createdAt);
+                
+                return `
+                    <div class="note-card bg-white rounded-xl shadow-md overflow-hidden ${importanceClass} fade-in" data-id="${note.id}">
+                        <div class="p-5">
+                            <div class="flex items-start justify-between mb-3">
+                                <div class="flex flex-wrap gap-1">
+                                    ${note.categories.map(cat => {
+                                        const c = categoryColors[cat] || defaultColor;
+                                        return `<span class="text-xs px-2 py-1 rounded-full ${c.bg} ${c.text}">${cat}</span>`;
+                                    }).join('')}
+                                </div>
+                                <div class="flex items-center gap-1">
+                                    ${note.shouldRemind ? `
+                                        <span class="text-orange-500" title="Will remind you">
+                                            <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                                                <path d="M12 22c1.1 0 2-.9 2-2h-4c0 1.1.9 2 2 2zm6-6v-5c0-3.07-1.64-5.64-4.5-6.32V4c0-.83-.67-1.5-1.5-1.5s-1.5.67-1.5 1.5v.68C7.63 5.36 6 7.92 6 11v5l-2 2v1h16v-1l-2-2z"/>
+                                            </svg>
+                                        </span>
+                                    ` : ''}
+                                    <button class="p-1 hover:bg-gray-100 rounded delete-note" title="Delete">
+                                        <svg class="w-4 h-4 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                        </svg>
+                                    </button>
+                                </div>
+                            </div>
+                            <p class="text-gray-700 mb-3 ${note.completed ? 'line-through opacity-50' : ''}">${note.content}</p>
+                            <div class="flex items-center justify-between text-xs text-gray-400">
+                                <span>${timeAgo}</span>
+                                ${note.categories.includes('To Do') ? `
+                                    <button class="toggle-complete flex items-center gap-1 ${note.completed ? 'text-green-500' : 'text-gray-400 hover:text-green-500'}">
+                                        <svg class="w-4 h-4" fill="${note.completed ? 'currentColor' : 'none'}" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                                        </svg>
+                                        ${note.completed ? 'Done' : 'Mark done'}
+                                    </button>
+                                ` : ''}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            // Add event listeners
+            container.querySelectorAll('.delete-note').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const card = e.target.closest('.note-card');
+                    const id = card.dataset.id;
+                    state.notes = state.notes.filter(n => n.id !== id);
+                    await deleteNoteFromCloud(id);
+                    if (!db || !userId) {
+                        renderNotes();
+                        renderCategories();
+                        updateReminderCount();
+                    }
+                });
+            });
+
+            container.querySelectorAll('.toggle-complete').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    const card = e.target.closest('.note-card');
+                    const id = card.dataset.id;
+                    const note = state.notes.find(n => n.id === id);
+                    if (note) {
+                        note.completed = !note.completed;
+                        await updateNoteInCloud(id, { completed: note.completed });
+                        if (!db || !userId) {
+                            renderNotes();
+                        }
+                    }
+                });
+            });
+        }
+
+        // Time ago helper
+        function getTimeAgo(timestamp) {
+            const seconds = Math.floor((Date.now() - timestamp) / 1000);
+            if (seconds < 60) return 'just now';
+            const minutes = Math.floor(seconds / 60);
+            if (minutes < 60) return `${minutes}m ago`;
+            const hours = Math.floor(minutes / 60);
+            if (hours < 24) return `${hours}h ago`;
+            const days = Math.floor(hours / 24);
+            if (days < 7) return `${days}d ago`;
+            return new Date(timestamp).toLocaleDateString();
+        }
+
+        // Add note (with optional AI clarification)
+        async function addNote(content) {
+            if (!content.trim()) return;
+
+            const processing = document.getElementById('aiProcessing');
+            processing.classList.remove('hidden');
+
+            const analysis = analyzeNote(content);
+
+            // Check if AI clarification is enabled
+            if (aiSettings.enableClarification && aiSettings.apiKey && aiSettings.provider !== 'none') {
+                try {
+                    const aiResult = await clarifyWithAI(content);
+                    processing.classList.add('hidden');
+                    
+                    if (aiResult) {
+                        showClarificationModal(content, aiResult, analysis);
+                        return;
+                    }
+                } catch (error) {
+                    console.error('AI clarification failed:', error);
+                }
+            }
+
+            // No clarification - save directly
+            processing.classList.add('hidden');
+            await saveNoteDirectly(content, analysis);
+        }
+
+        // Save note directly (after clarification or without it)
+        async function saveNoteDirectly(content, analysis, aiResult = null) {
+            const finalCategories = aiResult?.categories || analysis.categories;
+            const finalImportance = aiResult?.importance || analysis.importance;
+            const finalShouldRemind = aiResult?.shouldRemind ?? analysis.shouldRemind;
+            const finalReminderReason = aiResult?.reminderReason || analysis.reminderReason;
+
+            const note = {
+                id: Date.now().toString(),
+                content: content.trim(),
+                categories: finalCategories,
+                importance: finalImportance,
+                shouldRemind: finalShouldRemind,
+                reminderReason: finalReminderReason,
+                completed: false,
+                createdAt: Date.now()
+            };
+
+            // Add any new categories detected
+            let categoriesChanged = false;
+            finalCategories.forEach(cat => {
+                if (!state.categories.includes(cat)) {
+                    state.categories.push(cat);
+                    categoriesChanged = true;
+                }
+            });
+
+            // Save to cloud or localStorage
+            state.notes.unshift(note);
+            await saveNote(note);
+            
+            if (categoriesChanged) {
+                await saveCategoriestoCloud();
+            }
+            
+            document.getElementById('noteInput').value = '';
+            
+            // Only render if not using realtime listeners
+            if (!db || !userId) {
+                renderCategories();
+                renderNotes();
+                updateReminderCount();
+            }
+        }
+
+        // Voice recognition setup
+        function setupVoiceRecognition() {
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                document.getElementById('voiceBtn').style.display = 'none';
+                return;
+            }
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            state.recognition = new SpeechRecognition();
+            state.recognition.continuous = true;
+            state.recognition.interimResults = true;
+
+            state.recognition.onresult = (event) => {
+                let transcript = '';
+                for (let i = 0; i < event.results.length; i++) {
+                    transcript += event.results[i][0].transcript;
+                }
+                document.getElementById('noteInput').value = transcript;
+            };
+
+            state.recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                stopRecording();
+            };
+
+            state.recognition.onend = () => {
+                if (state.isRecording) {
+                    stopRecording();
+                }
+            };
+        }
+
+        function startRecording() {
+            state.isRecording = true;
+            state.recognition.start();
+            document.getElementById('voiceBtn').classList.add('bg-red-100', 'text-red-600');
+            document.getElementById('voiceBtn').classList.remove('bg-gray-100', 'text-gray-700');
+            document.getElementById('voiceText').textContent = 'Recording...';
+            document.getElementById('micIcon').classList.add('recording', 'text-red-500');
+            document.getElementById('voiceStatus').textContent = 'Listening...';
+            document.getElementById('voiceStatus').classList.remove('hidden');
+        }
+
+        function stopRecording() {
+            state.isRecording = false;
+            if (state.recognition) {
+                state.recognition.stop();
+            }
+            document.getElementById('voiceBtn').classList.remove('bg-red-100', 'text-red-600');
+            document.getElementById('voiceBtn').classList.add('bg-gray-100', 'text-gray-700');
+            document.getElementById('voiceText').textContent = 'Voice Note';
+            document.getElementById('micIcon').classList.remove('recording', 'text-red-500');
+            document.getElementById('voiceStatus').classList.add('hidden');
+        }
+
+        // Update reminder count
+        function updateReminderCount() {
+            const reminders = state.notes.filter(n => n.shouldRemind && !n.completed);
+            const badge = document.getElementById('reminderCount');
+            if (reminders.length > 0) {
+                badge.textContent = reminders.length;
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        }
+
+        // Show reminders modal
+        function showReminders() {
+            const modal = document.getElementById('reminderModal');
+            const list = document.getElementById('remindersList');
+            const reminders = state.notes.filter(n => n.shouldRemind && !n.completed);
+
+            if (reminders.length === 0) {
+                list.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <svg class="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                        </svg>
+                        <p>No active reminders</p>
+                        <p class="text-sm">Important thoughts will appear here</p>
+                    </div>
+                `;
+            } else {
+                list.innerHTML = reminders.map(note => {
+                    const colors = categoryColors[note.categories[0]] || defaultColor;
+                    return `
+                        <div class="p-4 rounded-xl ${colors.bg} mb-3 importance-${note.importance}">
+                            <div class="flex items-start justify-between">
+                                <div class="flex-1">
+                                    <p class="font-medium ${colors.text}">${note.content}</p>
+                                    <p class="text-xs mt-2 opacity-70">${note.reminderReason} • ${getTimeAgo(note.createdAt)}</p>
+                                </div>
+                                <button class="dismiss-reminder ml-3 p-1 hover:bg-white/50 rounded" data-id="${note.id}">
+                                    <svg class="w-4 h-4 opacity-50" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+
+                list.querySelectorAll('.dismiss-reminder').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const id = btn.dataset.id;
+                        const note = state.notes.find(n => n.id === id);
+                        if (note) {
+                            note.shouldRemind = false;
+                            saveState();
+                            showReminders();
+                            updateReminderCount();
+                        }
+                    });
+                });
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        // Show summary modal
+        function showSummary() {
+            const modal = document.getElementById('summaryModal');
+            const content = document.getElementById('summaryContent');
+            const summary = generateSummary();
+
+            if (!summary || summary.totalNotes === 0) {
+                content.innerHTML = `
+                    <div class="text-center py-8 text-gray-500">
+                        <p>Add some notes to see your insights!</p>
+                    </div>
+                `;
+            } else {
+                content.innerHTML = `
+                    <div class="space-y-6">
+                        <!-- Stats -->
+                        <div class="grid grid-cols-3 gap-4">
+                            <div class="bg-purple-50 rounded-xl p-4 text-center">
+                                <div class="text-3xl font-bold text-purple-600">${summary.totalNotes}</div>
+                                <div class="text-sm text-purple-600/70">Total Thoughts</div>
+                            </div>
+                            <div class="bg-orange-50 rounded-xl p-4 text-center">
+                                <div class="text-3xl font-bold text-orange-600">${summary.importantNotes.length}</div>
+                                <div class="text-sm text-orange-600/70">High Priority</div>
+                            </div>
+                            <div class="bg-red-50 rounded-xl p-4 text-center">
+                                <div class="text-3xl font-bold text-red-600">${summary.pendingTodos.length}</div>
+                                <div class="text-sm text-red-600/70">Pending Tasks</div>
+                            </div>
+                        </div>
+
+                        <!-- Insights -->
+                        <div class="bg-gradient-to-r from-purple-50 to-pink-50 rounded-xl p-5">
+                            <h4 class="font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                                <svg class="w-5 h-5 text-purple-500" fill="currentColor" viewBox="0 0 24 24">
+                                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                                </svg>
+                                AI Insights
+                            </h4>
+                            <ul class="space-y-2">
+                                ${summary.insights.map(i => `<li class="text-gray-600 text-sm">• ${i}</li>`).join('')}
+                            </ul>
+                        </div>
+
+                        <!-- Category Distribution -->
+                        <div>
+                            <h4 class="font-semibold text-gray-800 mb-3">Category Distribution</h4>
+                            <div class="space-y-2">
+                                ${Object.entries(summary.categoryCount)
+                                    .sort((a, b) => b[1] - a[1])
+                                    .map(([cat, count]) => {
+                                        const percent = Math.round((count / summary.totalNotes) * 100);
+                                        const colors = categoryColors[cat] || defaultColor;
+                                        return `
+                                            <div class="flex items-center gap-3">
+                                                <span class="text-sm text-gray-600 w-32 truncate">${cat}</span>
+                                                <div class="flex-1 h-2 bg-gray-100 rounded-full overflow-hidden">
+                                                    <div class="h-full ${colors.bg.replace('100', '400')}" style="width: ${percent}%"></div>
+                                                </div>
+                                                <span class="text-xs text-gray-500 w-8">${count}</span>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                            </div>
+                        </div>
+
+                        <!-- Top Themes -->
+                        ${summary.topThemes.length > 0 ? `
+                            <div>
+                                <h4 class="font-semibold text-gray-800 mb-3">Your Mind's Themes</h4>
+                                <div class="flex flex-wrap gap-2">
+                                    ${summary.topThemes.map(theme => `
+                                        <span class="px-3 py-1 bg-gray-100 text-gray-600 rounded-full text-sm">${theme}</span>
+                                    `).join('')}
+                                </div>
+                            </div>
+                        ` : ''}
+                    </div>
+                `;
+            }
+
+            modal.classList.remove('hidden');
+        }
+
+        // Event Listeners
+        document.getElementById('addNoteBtn').addEventListener('click', () => {
+            addNote(document.getElementById('noteInput').value);
+        });
+
+        document.getElementById('noteInput').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                addNote(document.getElementById('noteInput').value);
+            }
+        });
+
+        document.getElementById('voiceBtn').addEventListener('click', () => {
+            if (state.isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        });
+
+        document.getElementById('reminderBtn').addEventListener('click', showReminders);
+        document.getElementById('closeReminderModal').addEventListener('click', () => {
+            document.getElementById('reminderModal').classList.add('hidden');
+        });
+
+        document.getElementById('summaryBtn').addEventListener('click', showSummary);
+        document.getElementById('closeSummaryModal').addEventListener('click', () => {
+            document.getElementById('summaryModal').classList.add('hidden');
+        });
+
+        document.getElementById('addCategoryBtn').addEventListener('click', () => {
+            document.getElementById('categoryModal').classList.remove('hidden');
+            document.getElementById('newCategoryInput').focus();
+        });
+
+        document.getElementById('cancelCategory').addEventListener('click', () => {
+            document.getElementById('categoryModal').classList.add('hidden');
+            document.getElementById('newCategoryInput').value = '';
+        });
+
+        document.getElementById('saveCategory').addEventListener('click', () => {
+            const name = document.getElementById('newCategoryInput').value.trim();
+            if (name && !state.categories.includes(name)) {
+                state.categories.push(name);
+                saveState();
+                renderCategories();
+            }
+            document.getElementById('categoryModal').classList.add('hidden');
+            document.getElementById('newCategoryInput').value = '';
+        });
+
+        // Close modals on backdrop click
+        ['reminderModal', 'summaryModal', 'categoryModal', 'clarifyModal', 'settingsModal'].forEach(id => {
+            document.getElementById(id).addEventListener('click', (e) => {
+                if (e.target.id === id) {
+                    document.getElementById(id).classList.add('hidden');
+                }
+            });
+        });
+
+        // Settings modal handlers
+        document.getElementById('settingsBtn').addEventListener('click', () => {
+            // Load current settings into form
+            document.getElementById('aiProvider').value = aiSettings.provider;
+            document.getElementById('aiApiKey').value = aiSettings.apiKey;
+            document.getElementById('enableClarification').checked = aiSettings.enableClarification;
+            updateApiKeyHelp();
+            document.getElementById('settingsModal').classList.remove('hidden');
+        });
+
+        document.getElementById('closeSettingsModal').addEventListener('click', () => {
+            document.getElementById('settingsModal').classList.add('hidden');
+        });
+
+        document.getElementById('aiProvider').addEventListener('change', updateApiKeyHelp);
+
+        function updateApiKeyHelp() {
+            const provider = document.getElementById('aiProvider').value;
+            const apiKeySection = document.getElementById('apiKeySection');
+            const apiKeyHelp = document.getElementById('apiKeyHelp');
+            
+            if (provider === 'none') {
+                apiKeySection.classList.add('hidden');
+            } else {
+                apiKeySection.classList.remove('hidden');
+                if (provider === 'groq') {
+                    apiKeyHelp.innerHTML = 'Get a free Groq API key at <a href="https://console.groq.com" target="_blank" class="text-purple-600 hover:underline">console.groq.com</a>';
+                } else {
+                    apiKeyHelp.innerHTML = 'Get an OpenAI API key at <a href="https://platform.openai.com/api-keys" target="_blank" class="text-purple-600 hover:underline">platform.openai.com</a>';
+                }
+            }
+        }
+
+        document.getElementById('saveSettings').addEventListener('click', () => {
+            aiSettings.provider = document.getElementById('aiProvider').value;
+            aiSettings.apiKey = document.getElementById('aiApiKey').value;
+            aiSettings.enableClarification = document.getElementById('enableClarification').checked;
+            
+            // Save to localStorage
+            localStorage.setItem('mindkeeper_ai_provider', aiSettings.provider);
+            localStorage.setItem('mindkeeper_ai_key', aiSettings.apiKey);
+            localStorage.setItem('mindkeeper_clarification', aiSettings.enableClarification);
+            
+            document.getElementById('settingsModal').classList.add('hidden');
+            
+            // Show confirmation
+            showSyncStatus('online', 'Settings saved!');
+        });
+
+        // Clarification modal handlers
+        document.getElementById('cancelClarify').addEventListener('click', () => {
+            document.getElementById('clarifyModal').classList.add('hidden');
+            state.pendingNote = null;
+        });
+
+        document.getElementById('useOriginal').addEventListener('click', async () => {
+            if (state.pendingNote) {
+                await saveNoteDirectly(state.pendingNote.original, state.pendingNote.analysis);
+                document.getElementById('clarifyModal').classList.add('hidden');
+                state.pendingNote = null;
+            }
+        });
+
+        document.getElementById('saveClarified').addEventListener('click', async () => {
+            if (state.pendingNote) {
+                const clarifiedText = document.getElementById('clarifiedText').value;
+                await saveNoteDirectly(clarifiedText, state.pendingNote.analysis, state.pendingNote.aiResult);
+                document.getElementById('clarifyModal').classList.add('hidden');
+                state.pendingNote = null;
+            }
+        });
+
+        // Initialize
+        setupVoiceRecognition();
+        initFirebase(); // Initialize Firebase - will fallback to localStorage if not configured
+
+        // Periodic reminder check (could show notification)
+        setInterval(() => {
+            updateReminderCount();
+        }, 60000);
+    </script>
+</body>
+</html>
